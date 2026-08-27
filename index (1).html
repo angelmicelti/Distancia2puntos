@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0e0e12">
+<meta name="description" content="Simulación Monte Carlo: distancia media entre puntos aleatorios en circunferencia, semicircunferencia y sector circular.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dist. Monte Carlo">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<title>Distancia Media — Monte Carlo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:     #0e0e12;
+    --paper:   #f6f4ef;
+    --mist:    #dddad2;
+    --rule:    #c8c4bb;
+    --blue:    #2a5fad;
+    --gold:    #c9a227;
+    --green:   #1a8c5b;
+    --sector:  #b5543a;
+    --seg-b:   rgba(42,95,173,0.14);
+    --seg-g:   rgba(26,140,91,0.14);
+    --seg-s:   rgba(181,84,58,0.14);
+    --mono:    'DM Mono', monospace;
+    --serif:   'Fraunces', Georgia, serif;
+  }
+
+  html { font-size: 15px; }
+  @media (min-width: 1400px) { html { font-size: 16px; } }
+  @media (min-width: 1800px) { html { font-size: 17px; } }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--mono);
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    border-bottom: 1.5px solid var(--ink);
+    padding: .7rem 1.2rem .6rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  header h1 {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+  }
+  header .subtitle {
+    font-size: .58rem;
+    color: #888;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+  }
+
+  /* ─── MAIN LAYOUT ─── */
+  main {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 46px - 36px);
+    height: calc(100dvh - 46px - 36px);
+    overflow: hidden;
+  }
+
+  /* ─── 3×3 FIGURES GRID ─── */
+  .figures-grid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    border-top: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+
+  .fig-row {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(190px, 260px) 1fr minmax(130px, 175px);
+    min-height: 0;
+    overflow: hidden;
+    border-bottom: 1px solid var(--rule);
+  }
+  .fig-row:last-child { border-bottom: none; }
+  .fig-row > * {
+    border-right: 1px solid var(--rule);
+    overflow: hidden;
+  }
+  .fig-row > *:last-child { border-right: none; }
+
+  /* ─── DOT INDICATORS ─── */
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green  { background: var(--green);  }
+  .dot-blue   { background: var(--blue);   }
+  .dot-sector { background: var(--sector); }
+
+  /* ─── THEORY CELL ─── */
+  .fig-theory {
+    padding: .65rem .9rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .ft-head {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    flex-shrink: 0;
+  }
+  .ft-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: .78rem;
+    line-height: 1.2;
+  }
+  .ft-formula {
+    font-size: .56rem;
+    margin-top: .08rem;
+    opacity: .65;
+  }
+  .ft-formula.green  { color: var(--green);  }
+  .ft-formula.blue   { color: var(--blue);   }
+  .ft-formula.sector { color: var(--sector); }
+  .ft-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .ft-desc {
+    font-size: .6rem;
+    color: #666;
+    line-height: 1.55;
+    margin-top: .5rem;
+  }
+  .ft-exact {
+    font-size: .58rem;
+    color: #777;
+    margin-top: .5rem;
+    padding-top: .45rem;
+    border-top: 1px solid var(--mist);
+  }
+  .ft-exact strong { font-weight: 500; color: var(--ink); }
+
+  /* Sector angle controls (inside theory cell) */
+  .angle-control { margin-top: .5rem; }
+  .angle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: .35rem;
+  }
+  .ctrl-label {
+    font-size: .54rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #999;
+  }
+  .angle-display {
+    font-family: var(--serif);
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--sector);
+  }
+  .angle-presets {
+    display: flex;
+    gap: .25rem;
+    flex-wrap: wrap;
+    margin-top: .35rem;
+  }
+  .preset-btn {
+    font-family: var(--mono);
+    font-size: .52rem;
+    padding: .15rem .4rem;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .preset-btn:hover { border-color: var(--sector); color: var(--sector); }
+  .preset-btn.active {
+    border-color: var(--sector);
+    background: var(--sector);
+    color: #fff;
+  }
+  .equiv-note {
+    font-size: .54rem;
+    color: var(--sector);
+    margin-top: .3rem;
+    font-style: italic;
+  }
+
+  /* ─── CANVAS CELL ─── */
+  .fig-canvas {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    overflow: hidden;
+    min-height: 0;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ─── RESULTS CELL ─── */
+  .fig-results {
+    padding: .65rem .85rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: .25rem;
+    min-height: 0;
+  }
+  .fr-label {
+    font-size: .54rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #999;
+    flex-shrink: 0;
+  }
+  .fr-value {
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+  .fr-value.green  { color: var(--green);  }
+  .fr-value.blue   { color: var(--blue);   }
+  .fr-value.sector { color: var(--sector); }
+  .fr-error {
+    font-size: .55rem;
+    opacity: .7;
+    white-space: nowrap;
+  }
+  .fr-error.green  { color: var(--green);  }
+  .fr-error.blue   { color: var(--blue);   }
+  .fr-error.sector { color: var(--sector); }
+  .fr-n {
+    font-size: .55rem;
+    color: #aaa;
+    margin-top: auto;
+    white-space: nowrap;
+  }
+
+  /* ─── SHARED CONTROLS ─── */
+  .controls { flex-shrink: 0; }
+
+  /* SLIDER */
+  .slider-block {
+    padding: .7rem 1.2rem .65rem;
+    border-top: 1px solid var(--rule);
+  }
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: .55rem;
+  }
+  .slider-title { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; color: #999; }
+  .slider-n { font-family: var(--serif); font-size: .92rem; font-weight: 700; color: var(--ink); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%; height: 3px;
+    background: var(--mist);
+    border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--paper);
+    box-shadow: 0 0 0 1.5px var(--ink);
+    cursor: pointer;
+    transition: transform .1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+  input[type=range]::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--paper);
+    cursor: pointer;
+  }
+  .log-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: .3rem;
+    font-size: .52rem;
+    color: #bbb;
+  }
+
+  /* progress */
+  .progress-wrap {
+    width: 100%; height: 3px;
+    background: var(--mist);
+    border-radius: 2px;
+    margin-top: .45rem;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .progress-wrap.active { opacity: 1; }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue), var(--sector));
+    border-radius: 2px;
+    width: 0%;
+    transition: width .06s linear;
+  }
+
+  /* BUTTONS */
+  .btn-row {
+    padding: .6rem 1.2rem;
+    display: flex;
+    gap: .6rem;
+    border-top: 1px solid var(--rule);
+  }
+  button {
+    font-family: var(--mono);
+    font-size: .66rem;
+    padding: .4rem .85rem;
+    border: 1.5px solid var(--ink);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background .15s, color .15s;
+    letter-spacing: .04em;
+  }
+  button:hover { background: var(--ink); color: var(--paper); }
+  button.primary { background: var(--ink); color: var(--paper); }
+  button.primary:hover { background: #333; }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button:disabled:hover { background: transparent; color: var(--ink); }
+  button.primary:disabled:hover { background: var(--ink); color: var(--paper); }
+
+  /* HISTORY */
+  .history-block {
+    border-top: 1px solid var(--rule);
+  }
+  .history-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem 1.2rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s;
+  }
+  .history-toggle:hover { background: rgba(0,0,0,.025); }
+  .history-toggle-label {
+    font-size: .54rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #bbb;
+  }
+  .history-chevron {
+    font-size: .58rem;
+    color: #bbb;
+    transition: transform .25s ease;
+    margin-left: auto;
+  }
+  .history-block.open .history-chevron { transform: rotate(180deg); }
+  .history-count {
+    font-size: .48rem;
+    background: var(--mist);
+    color: #888;
+    padding: .04rem .3rem;
+    border-radius: 2px;
+    min-width: 1.1em;
+    text-align: center;
+  }
+  .history-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .3s ease;
+  }
+  .history-block.open .history-content {
+    max-height: 180px;
+    overflow-y: auto;
+    padding: .25rem 1.2rem .4rem;
+  }
+  .history-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem .6rem;
+    font-size: .56rem;
+    padding: .2rem 0;
+    border-bottom: 1px solid var(--mist);
+    color: #666;
+    animation: fadeIn .25s ease;
+    align-items: baseline;
+  }
+  .h-n { font-weight: 500; margin-right: .2rem; }
+  .h-green  { color: var(--green);  font-weight: 500; }
+  .h-blue   { color: var(--blue);   font-weight: 500; }
+  .h-sector { color: var(--sector); font-weight: 500; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; } }
+
+  /* FOOTER */
+  footer {
+    border-top: 1.5px solid var(--ink);
+    padding: .5rem 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: .54rem;
+    color: #aaa;
+    letter-spacing: .04em;
+    flex-wrap: wrap;
+    gap: .4rem;
+  }
+  footer .fml {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: .66rem;
+  }
+  footer .fml-green  { color: var(--green);  }
+  footer .fml-blue   { color: var(--blue);   }
+  footer .fml-sector { color: var(--sector); }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 900px) {
+    .fig-row {
+      grid-template-columns: minmax(160px, 220px) 1fr minmax(110px, 145px);
+    }
+  }
+
+  @media (max-width: 760px) {
+    main {
+      height: auto;
+      overflow: visible;
+    }
+    html { font-size: 14px; }
+    .figures-grid { border: none; overflow: visible; }
+    .fig-row {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--rule);
+      overflow: visible;
+    }
+    .fig-row:last-child { border-bottom: none; }
+    .fig-row > * { border: none; overflow: visible; }
+    .fig-theory {
+      padding: .55rem .9rem;
+      border-bottom: 1px solid var(--mist);
+    }
+    .ft-body { max-height: 140px; overflow-y: auto; }
+    .fig-canvas { min-height: 200px; height: 200px; }
+    .fig-results {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .35rem .8rem;
+      padding: .5rem .9rem;
+    }
+    .fr-n { margin-top: 0; }
+    .btn-row { padding: .55rem 1rem; }
+    .slider-block { padding: .6rem 1rem .55rem; }
+    button { padding: .5rem .9rem; font-size: .7rem; }
+    input[type=range] { height: 4px; }
+    input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; }
+    footer { flex-direction: column; align-items: flex-start; gap: .3rem; }
+  }
+
+  @media (max-width: 420px) {
+    html { font-size: 13px; }
+    header { padding: .6rem 1rem .5rem; }
+    header h1 { font-size: .95rem; }
+    .fig-canvas { min-height: 160px; height: 160px; }
+    .ft-body { max-height: 100px; }
+  }
+
+  @media (max-height: 520px) and (orientation: landscape) {
+    main { height: 100vh; height: 100dvh; overflow: hidden; }
+    .fig-row {
+      grid-template-columns: minmax(160px, 200px) 1fr minmax(110px, 140px);
+    }
+    .slider-block { padding: .35rem 1rem .3rem; }
+    .btn-row { padding: .3rem 1rem; }
+    .history-block.open .history-content { max-height: 80px; }
+  }
+
+  @supports (padding: env(safe-area-inset-bottom)) {
+    footer { padding-bottom: calc(.5rem + env(safe-area-inset-bottom)); }
+    .btn-row { padding-bottom: calc(.6rem + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ─── -->
+<header>
+  <div>
+    <div class="subtitle">Simulación Monte Carlo</div>
+    <h1>Distancia media entre puntos aleatorios</h1>
+  </div>
+</header>
+
+<!-- ─── MAIN ─── -->
+<main>
+
+  <div class="figures-grid">
+
+    <div class="fig-row">
+    <!-- ═══ ROW 1: CIRCUNFERENCIA ═══ -->
+    <div class="fig-theory">
+      <div class="ft-head">
+        <span class="dot dot-green"></span>
+        <div class="ft-text">
+          <div class="ft-title">Circunferencia completa</div>
+          <div class="ft-formula green">d̄ = 4/π ≈ 1.2732</div>
+        </div>
+      </div>
+      <div class="ft-body">
+        <p class="ft-desc">Puntos aleatorios uniformes sobre la circunferencia unidad. El ángulo θ se distribuye uniformemente en [0, 2π]. La distancia entre dos puntos es la longitud de la cuerda que los une.</p>
+        <div class="ft-exact">Valor exacto: <strong>E[d] = 4/π ≈ 1.27324</strong></div>
+      </div>
+    </div>
+
+    <div class="fig-canvas">
+      <div class="canvas-wrap">
+        <canvas id="canvasCircle"></canvas>
+      </div>
+    </div>
+
+    <div class="fig-results">
+      <div class="fr-label">Simulación</div>
+      <div class="fr-value green" id="valCircle">—</div>
+      <div class="fr-error green" id="errCircle"></div>
+      <div class="fr-n" id="nCircle">N = 0</div>
+    </div>
+    </div>
+
+    <div class="fig-row">
+    <!-- ═══ ROW 2: SEMICIRCUNFERENCIA ═══ -->
+    <div class="fig-theory">
+      <div class="ft-head">
+        <span class="dot dot-blue"></span>
+        <div class="ft-text">
+          <div class="ft-title">Semicircunferencia</div>
+          <div class="ft-formula blue">d̄ = 8(π−2)/π² ≈ 0.9253</div>
+        </div>
+      </div>
+      <div class="ft-body">
+        <p class="ft-desc">Puntos aleatorios uniformes sobre la semicircunferencia superior (θ ∈ [0, π]). Incluye el diámetro como borde del arco.</p>
+        <div class="ft-exact">Valor exacto: <strong>E[d] = 8(π−2)/π² ≈ 0.92534</strong></div>
+      </div>
+    </div>
+
+    <div class="fig-canvas">
+      <div class="canvas-wrap">
+        <canvas id="canvasSemi"></canvas>
+      </div>
+    </div>
+
+    <div class="fig-results">
+      <div class="fr-label">Simulación</div>
+      <div class="fr-value blue" id="valSemi">—</div>
+      <div class="fr-error blue" id="errSemi"></div>
+      <div class="fr-n" id="nSemi">N = 0</div>
+    </div>
+    </div>
+
+    <div class="fig-row">
+    <!-- ═══ ROW 3: SECTOR CIRCULAR ═══ -->
+    <div class="fig-theory">
+      <div class="ft-head">
+        <span class="dot dot-sector"></span>
+        <div class="ft-text">
+          <div class="ft-title">Sector circular</div>
+          <div class="ft-formula sector" id="sectorFormulaHead">d̄ ≈ 0.5873</div>
+        </div>
+      </div>
+      <div class="ft-body">
+        <p class="ft-desc">Puntos aleatorios uniformes sobre un arco de ángulo θ₀ en la circunferencia unidad.</p>
+        <div class="angle-control">
+          <div class="angle-header">
+            <span class="ctrl-label">Ángulo θ₀</span>
+            <span class="angle-display" id="angleDisplay">π/2 ≈ 1.571</span>
+          </div>
+          <input type="range" id="angleSlider" min="0.1" max="6.283" step="0.001" value="1.5708">
+          <div class="angle-presets" id="anglePresets"></div>
+        </div>
+        <div class="equiv-note" id="equivNote" style="display:none"></div>
+        <div class="ft-exact" id="sectorExact">E[d] = 8(θ₀ − 2sin(θ₀/2)) / θ₀² ≈ <strong>0.58728</strong></div>
+      </div>
+    </div>
+
+    <div class="fig-canvas">
+      <div class="canvas-wrap">
+        <canvas id="canvasSector"></canvas>
+      </div>
+    </div>
+
+    <div class="fig-results">
+      <div class="fr-label">Simulación</div>
+      <div class="fr-value sector" id="valSector">—</div>
+      <div class="fr-error sector" id="errSector"></div>
+      <div class="fr-n" id="nSector">N = 0</div>
+    </div>
+    </div>
+
+  </div>
+
+  <!-- ─── SHARED CONTROLS ─── -->
+  <div class="controls">
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-title">Número de pares N</span>
+        <span class="slider-n" id="nLabel">1 000</span>
+      </div>
+      <input type="range" id="slider" min="0" max="600" value="150" step="1">
+      <div class="log-ticks">
+        <span>1</span><span>10</span><span>100</span><span>1K</span><span>10K</span><span>100K</span><span>1M</span>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="primary" id="btnRun">Simular</button>
+      <button id="btnReset">Reiniciar</button>
+    </div>
+
+    <div class="history-block" id="historyBlock">
+      <div class="history-toggle" id="historyToggle">
+        <span class="history-toggle-label">Historial</span>
+        <span class="history-count" id="historyCount">0</span>
+        <span class="history-chevron">▾</span>
+      </div>
+      <div class="history-content" id="historyContent">
+        <div id="historyList"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <span>Puntos: ángulo θ uniforme en el arco correspondiente</span>
+  <span class="fml">
+    <span class="fml-green">Circ: 4/π ≈ 1.2732</span>
+    &nbsp;·&nbsp;
+    <span class="fml-blue">Semi: 8(π−2)/π² ≈ 0.9253</span>
+    &nbsp;·&nbsp;
+    <span class="fml-sector">Sector: 8(θ₀−2sin(θ₀/2))/θ₀²</span>
+  </span>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   Constants
+   ═══════════════════════════════════════════════════════════ */
+const EXACT_CIRCLE = 4 / Math.PI;
+const EXACT_SEMI   = 8 * (Math.PI - 2) / (Math.PI * Math.PI);
+const BATCH       = 6000;
+const ALL_IDS     = ['circle', 'semi', 'sector'];
+
+const PRESETS = [
+  { label: 'π/4',  value: Math.PI / 4   },
+  { label: 'π/2',  value: Math.PI / 2   },
+  { label: '2π/3', value: 2 * Math.PI / 3 },
+  { label: 'π',    value: Math.PI       },
+  { label: '3π/2', value: 3 * Math.PI / 2 },
+  { label: '2π',   value: 2 * Math.PI   },
+];
+
+function exactSectorValue(theta) {
+  return 8 * (theta - 2 * Math.sin(theta / 2)) / (theta * theta);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   State
+   ═══════════════════════════════════════════════════════════ */
+let sectorTheta = Math.PI / 2;
+
+const state = {
+  running: false,
+  totalCount: 0,
+  target: 0,
+  raf: null,
+  data: {
+    circle: { sum: 0, dots: [] },
+    semi:   { sum: 0, dots: [] },
+    sector: { sum: 0, dots: [] },
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   DOM refs
+   ═══════════════════════════════════════════════════════════ */
+const canvasCircle = document.getElementById('canvasCircle');
+const ctxC         = canvasCircle.getContext('2d');
+const canvasSemi   = document.getElementById('canvasSemi');
+const ctxS         = canvasSemi.getContext('2d');
+const canvasSector = document.getElementById('canvasSector');
+const ctxSec       = canvasSector.getContext('2d');
+
+const slider   = document.getElementById('slider');
+const nLabel   = document.getElementById('nLabel');
+const btnRun   = document.getElementById('btnRun');
+const btnReset = document.getElementById('btnReset');
+const progWrap = document.getElementById('progressWrap');
+const progBar  = document.getElementById('progressBar');
+const histList     = document.getElementById('historyList');
+const historyBlock = document.getElementById('historyBlock');
+const historyToggle = document.getElementById('historyToggle');
+const historyCount = document.getElementById('historyCount');
+let historyOpen = false;
+
+historyToggle.addEventListener('click', () => {
+  historyOpen = !historyOpen;
+  historyBlock.classList.toggle('open', historyOpen);
+});
+
+const angleSlider  = document.getElementById('angleSlider');
+const angleDisplay = document.getElementById('angleDisplay');
+const presetsCont  = document.getElementById('anglePresets');
+
+/* ═══════════════════════════════════════════════════════════
+   Utility
+   ═══════════════════════════════════════════════════════════ */
+function sliderToN(v) { return Math.max(1, Math.round(Math.pow(10, v / 100))); }
+
+function fmt(n) {
+  return n >= 1e6 ? '1 000 000'
+       : n >= 1e3 ? (n / 1e3).toFixed(n % 1e3 === 0 ? 0 : 1).replace('.', ',') + ' K'
+       : String(n);
+}
+
+function fmtFull(n) { return n.toLocaleString('es-ES'); }
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function getThetaFor(id) {
+  if (id === 'circle') return 2 * Math.PI;
+  if (id === 'semi')   return Math.PI;
+  return sectorTheta;
+}
+
+function getExactFor(id) {
+  if (id === 'circle') return EXACT_CIRCLE;
+  if (id === 'semi')   return EXACT_SEMI;
+  return exactSectorValue(sectorTheta);
+}
+
+function formatAngle(theta) {
+  const fracs = [
+    [1/6,'π/6'],[1/4,'π/4'],[1/3,'π/3'],
+    [1/2,'π/2'],[2/3,'2π/3'],[3/4,'3π/4'],
+    [1,'π'],[5/4,'5π/4'],[3/2,'3π/2'],[7/4,'7π/4'],[2,'2π']
+  ];
+  for (const [f, sym] of fracs) {
+    if (Math.abs(theta - f * Math.PI) < 0.005) return sym;
+  }
+  return theta.toFixed(3);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Angle controls (sector)
+   ═══════════════════════════════════════════════════════════ */
+function setAngle(theta) {
+  sectorTheta = Math.max(0.1, Math.min(2 * Math.PI, theta));
+  angleSlider.value = sectorTheta;
+
+  const sym = formatAngle(sectorTheta);
+  angleDisplay.textContent = sym + ' ≈ ' + sectorTheta.toFixed(3);
+  document.getElementById('sectorFormulaHead').textContent =
+    'd̄ ≈ ' + exactSectorValue(sectorTheta).toFixed(4);
+
+  const val = exactSectorValue(sectorTheta);
+  document.getElementById('sectorExact').innerHTML =
+    'E[d] = 8(θ₀ − 2sin(θ₀/2)) / θ₀² ≈ <strong>' + val.toFixed(5) + '</strong>';
+
+  const note = document.getElementById('equivNote');
+  if (Math.abs(sectorTheta - Math.PI) < 0.005) {
+    note.style.display = '';
+    note.textContent = '≡ Semicircunferencia (θ₀ = π)';
+  } else if (Math.abs(sectorTheta - 2 * Math.PI) < 0.005) {
+    note.style.display = '';
+    note.textContent = '≡ Circunferencia completa (θ₀ = 2π)';
+  } else {
+    note.style.display = 'none';
+  }
+
+  presetsCont.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.classList.toggle('active', Math.abs(parseFloat(btn.dataset.val) - sectorTheta) < 0.005);
+  });
+
+  if (!state.running) {
+    requestAnimationFrame(() => {
+      sizeCanvas(canvasSector);
+      drawSector();
+    });
+  }
+}
+
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn' + (Math.abs(p.value - sectorTheta) < 0.005 ? ' active' : '');
+  btn.textContent = p.label;
+  btn.dataset.val = p.value;
+  btn.addEventListener('click', () => setAngle(p.value));
+  presetsCont.appendChild(btn);
+});
+
+angleSlider.addEventListener('input', () => setAngle(parseFloat(angleSlider.value)));
+
+/* ═══════════════════════════════════════════════════════════
+   Slider → N
+   ═══════════════════════════════════════════════════════════ */
+slider.addEventListener('input', () => nLabel.textContent = fmt(sliderToN(+slider.value)));
+nLabel.textContent = fmt(sliderToN(+slider.value));
+
+/* ═══════════════════════════════════════════════════════════
+   Canvas sizing
+   ═══════════════════════════════════════════════════════════ */
+function sizeCanvas(canvas) {
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  canvas.width  = Math.max(80, Math.round(W * dpr));
+  canvas.height = Math.max(50, Math.round(H * dpr));
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function logSize(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  return [canvas.width / dpr, canvas.height / dpr];
+}
+
+function resizeAll() {
+  sizeCanvas(canvasCircle); sizeCanvas(canvasSemi); sizeCanvas(canvasSector);
+  drawAll();
+}
+
+window.addEventListener('resize', () => requestAnimationFrame(resizeAll));
+
+/* ═══════════════════════════════════════════════════════════
+   Draw: Circle
+   ═══════════════════════════════════════════════════════════ */
+function drawCircle() {
+  const [W, H] = logSize(canvasCircle);
+  ctxC.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(cx - 10, cy - 10);
+  const lw = Math.max(1.2, R * 0.01);
+  const dotR = Math.max(3, R * 0.022);
+
+  ctxC.strokeStyle = '#dddad2'; ctxC.lineWidth = 1;
+  ctxC.beginPath(); ctxC.moveTo(8, cy); ctxC.lineTo(W - 8, cy); ctxC.stroke();
+  ctxC.beginPath(); ctxC.moveTo(cx, 4);  ctxC.lineTo(cx, H - 4);  ctxC.stroke();
+
+  state.data.circle.dots.forEach(({ a1, a2 }) => {
+    const x1 = cx + R * Math.cos(a1), y1 = cy - R * Math.sin(a1);
+    const x2 = cx + R * Math.cos(a2), y2 = cy - R * Math.sin(a2);
+    ctxC.strokeStyle = 'rgba(26,140,91,0.14)'; ctxC.lineWidth = 1;
+    ctxC.beginPath(); ctxC.moveTo(x1, y1); ctxC.lineTo(x2, y2); ctxC.stroke();
+  });
+
+  ctxC.beginPath(); ctxC.arc(cx, cy, R, 0, 2 * Math.PI);
+  ctxC.strokeStyle = '#1a8c5b'; ctxC.lineWidth = lw * 2.2; ctxC.stroke();
+
+  const dots = state.data.circle.dots;
+  if (dots.length > 0) {
+    const last = dots[dots.length - 1];
+    const x1 = cx + R * Math.cos(last.a1), y1 = cy - R * Math.sin(last.a1);
+    const x2 = cx + R * Math.cos(last.a2), y2 = cy - R * Math.sin(last.a2);
+    ctxC.strokeStyle = 'rgba(201,162,39,0.9)'; ctxC.lineWidth = lw * 1.8;
+    ctxC.setLineDash([dotR, dotR * 0.7]);
+    ctxC.beginPath(); ctxC.moveTo(x1, y1); ctxC.lineTo(x2, y2); ctxC.stroke();
+    ctxC.setLineDash([]);
+    [[last.a1, '#1a8c5b'], [last.a2, '#c9a227']].forEach(([a, col]) => {
+      const px = cx + R * Math.cos(a), py = cy - R * Math.sin(a);
+      ctxC.beginPath(); ctxC.arc(px, py, dotR, 0, Math.PI * 2);
+      ctxC.fillStyle = col; ctxC.fill();
+      ctxC.strokeStyle = '#fff'; ctxC.lineWidth = lw; ctxC.stroke();
+    });
+  }
+
+  const fs = Math.max(9, R * 0.07);
+  ctxC.fillStyle = '#bbb'; ctxC.font = fs + 'px DM Mono,monospace';
+  ctxC.fillText('−R', cx - R - fs * 1.4, cy + fs * 0.4);
+  ctxC.fillText('+R', cx + R + fs * 0.3,  cy + fs * 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Draw: Semicircle
+   ═══════════════════════════════════════════════════════════ */
+function drawSemi() {
+  const [W, H] = logSize(canvasSemi);
+  ctxS.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H - 12;
+  const R = Math.min(cx - 10, cy - 6);
+  const lw = Math.max(1.2, R * 0.01);
+  const dotR = Math.max(3, R * 0.022);
+
+  ctxS.strokeStyle = '#dddad2'; ctxS.lineWidth = 1;
+  ctxS.beginPath(); ctxS.moveTo(8, cy); ctxS.lineTo(W - 8, cy); ctxS.stroke();
+  ctxS.beginPath(); ctxS.moveTo(cx, cy - R - 6); ctxS.lineTo(cx, cy + 2); ctxS.stroke();
+
+  state.data.semi.dots.forEach(({ a1, a2 }) => {
+    const x1 = cx + R * Math.cos(a1), y1 = cy - R * Math.sin(a1);
+    const x2 = cx + R * Math.cos(a2), y2 = cy - R * Math.sin(a2);
+    ctxS.strokeStyle = 'rgba(42,95,173,0.14)'; ctxS.lineWidth = 1;
+    ctxS.beginPath(); ctxS.moveTo(x1, y1); ctxS.lineTo(x2, y2); ctxS.stroke();
+  });
+
+  ctxS.beginPath(); ctxS.arc(cx, cy, R, Math.PI, 0, false);
+  ctxS.strokeStyle = '#2a5fad'; ctxS.lineWidth = lw * 2.2; ctxS.stroke();
+
+  ctxS.beginPath(); ctxS.moveTo(cx - R, cy); ctxS.lineTo(cx + R, cy);
+  ctxS.strokeStyle = '#0e0e12'; ctxS.lineWidth = lw * 1.5; ctxS.stroke();
+
+  const dots = state.data.semi.dots;
+  if (dots.length > 0) {
+    const last = dots[dots.length - 1];
+    const x1 = cx + R * Math.cos(last.a1), y1 = cy - R * Math.sin(last.a1);
+    const x2 = cx + R * Math.cos(last.a2), y2 = cy - R * Math.sin(last.a2);
+    ctxS.strokeStyle = 'rgba(201,162,39,0.9)'; ctxS.lineWidth = lw * 1.8;
+    ctxS.setLineDash([dotR, dotR * 0.7]);
+    ctxS.beginPath(); ctxS.moveTo(x1, y1); ctxS.lineTo(x2, y2); ctxS.stroke();
+    ctxS.setLineDash([]);
+    [[last.a1, '#2a5fad'], [last.a2, '#c9a227']].forEach(([a, col]) => {
+      const px = cx + R * Math.cos(a), py = cy - R * Math.sin(a);
+      ctxS.beginPath(); ctxS.arc(px, py, dotR, 0, Math.PI * 2);
+      ctxS.fillStyle = col; ctxS.fill();
+      ctxS.strokeStyle = '#fff'; ctxS.lineWidth = lw; ctxS.stroke();
+    });
+  }
+
+  const fs = Math.max(8, R * 0.07);
+  ctxS.fillStyle = '#bbb'; ctxS.font = fs + 'px DM Mono,monospace';
+  ctxS.fillText('−R', cx - R - fs * 1.4, cy + fs * 0.9);
+  ctxS.fillText('+R', cx + R + fs * 0.3,  cy + fs * 0.9);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Draw: Sector
+   ═══════════════════════════════════════════════════════════ */
+function drawSector() {
+  const [W, H] = logSize(canvasSector);
+  ctxSec.clearRect(0, 0, W, H);
+  const cx = W / 2;
+  const theta = sectorTheta;
+  const margin = 10;
+
+  const vRatio = theta <= Math.PI ? 1 : (1 - Math.cos(theta / 2));
+  const hRatio = theta < Math.PI ? Math.sin(theta / 2) : 1;
+
+  const R = Math.min(
+    (cx - margin) / Math.max(0.01, hRatio),
+    (H - 2 * margin) / Math.max(0.01, vRatio)
+  );
+
+  const yOffset = theta <= Math.PI
+    ? R / 2
+    : R * (1 + Math.cos(theta / 2)) / 2;
+  const cy = H / 2 + yOffset;
+
+  const lw = Math.max(1.2, R * 0.01);
+  const dotR = Math.max(3, R * 0.022);
+  const mStart = Math.PI / 2 - theta / 2;
+
+  ctxSec.strokeStyle = '#dddad2'; ctxSec.lineWidth = 1;
+  ctxSec.beginPath(); ctxSec.moveTo(8, cy); ctxSec.lineTo(W - 8, cy); ctxSec.stroke();
+  ctxSec.beginPath(); ctxSec.moveTo(cx, 4);  ctxSec.lineTo(cx, H - 4);  ctxSec.stroke();
+
+  state.data.sector.dots.forEach(({ a1, a2 }) => {
+    const da1 = mStart + a1, da2 = mStart + a2;
+    const x1 = cx + R * Math.cos(da1), y1 = cy - R * Math.sin(da1);
+    const x2 = cx + R * Math.cos(da2), y2 = cy - R * Math.sin(da2);
+    ctxSec.strokeStyle = 'rgba(181,84,58,0.14)'; ctxSec.lineWidth = 1;
+    ctxSec.beginPath(); ctxSec.moveTo(x1, y1); ctxSec.lineTo(x2, y2); ctxSec.stroke();
+  });
+
+  if (Math.abs(theta - 2 * Math.PI) < 0.01) {
+    ctxSec.beginPath(); ctxSec.arc(cx, cy, R, 0, 2 * Math.PI);
+  } else {
+    ctxSec.beginPath(); ctxSec.arc(cx, cy, R, -mStart - theta, -mStart, false);
+  }
+  ctxSec.strokeStyle = '#b5543a'; ctxSec.lineWidth = lw * 2.2; ctxSec.stroke();
+
+  const rx1 = cx + R * Math.cos(mStart),       ry1 = cy - R * Math.sin(mStart);
+  const rx2 = cx + R * Math.cos(mStart + theta), ry2 = cy - R * Math.sin(mStart + theta);
+  ctxSec.beginPath();
+  ctxSec.moveTo(cx, cy); ctxSec.lineTo(rx1, ry1);
+  ctxSec.moveTo(cx, cy); ctxSec.lineTo(rx2, ry2);
+  ctxSec.strokeStyle = '#0e0e12'; ctxSec.lineWidth = lw * 1.5; ctxSec.stroke();
+
+  ctxSec.beginPath(); ctxSec.arc(cx, cy, Math.max(2, lw * 1.5), 0, Math.PI * 2);
+  ctxSec.fillStyle = '#0e0e12'; ctxSec.fill();
+
+  const dots = state.data.sector.dots;
+  if (dots.length > 0) {
+    const last = dots[dots.length - 1];
+    const da1 = mStart + last.a1, da2 = mStart + last.a2;
+    const x1 = cx + R * Math.cos(da1), y1 = cy - R * Math.sin(da1);
+    const x2 = cx + R * Math.cos(da2), y2 = cy - R * Math.sin(da2);
+    ctxSec.strokeStyle = 'rgba(201,162,39,0.9)'; ctxSec.lineWidth = lw * 1.8;
+    ctxSec.setLineDash([dotR, dotR * 0.7]);
+    ctxSec.beginPath(); ctxSec.moveTo(x1, y1); ctxSec.lineTo(x2, y2); ctxSec.stroke();
+    ctxSec.setLineDash([]);
+    [[da1, '#b5543a'], [da2, '#c9a227']].forEach(([a, col]) => {
+      const px = cx + R * Math.cos(a), py = cy - R * Math.sin(a);
+      ctxSec.beginPath(); ctxSec.arc(px, py, dotR, 0, Math.PI * 2);
+      ctxSec.fillStyle = col; ctxSec.fill();
+      ctxSec.strokeStyle = '#fff'; ctxSec.lineWidth = lw; ctxSec.stroke();
+    });
+  }
+
+  const fs = Math.max(9, R * 0.07);
+  ctxSec.fillStyle = '#bbb'; ctxSec.font = fs + 'px DM Mono,monospace';
+  ctxSec.fillText('θ₀', cx + fs * 0.6, cy - R - fs * 0.5);
+}
+
+function drawAll() { drawCircle(); drawSemi(); drawSector(); }
+
+/* ═══════════════════════════════════════════════════════════
+   Simulation
+   ═══════════════════════════════════════════════════════════ */
+function startSim() {
+  if (state.running) return;
+
+  const N = sliderToN(+slider.value);
+  state.running    = true;
+  state.totalCount = 0;
+  state.target     = N;
+  state.raf        = null;
+
+  ALL_IDS.forEach(id => { state.data[id] = { sum: 0, dots: [] }; });
+
+  ALL_IDS.forEach(id => {
+    document.getElementById('val' + cap(id)).textContent  = '…';
+    document.getElementById('err' + cap(id)).textContent   = '';
+    document.getElementById('n'   + cap(id)).textContent   = 'N = 0';
+  });
+
+  btnRun.disabled = btnReset.disabled = true;
+  progWrap.classList.add('active');
+  progBar.style.width = '0%';
+
+  state.raf = requestAnimationFrame(runBatch);
+}
+
+function runBatch() {
+  if (!state.running) return;
+
+  const remaining = state.target - state.totalCount;
+  const bs = Math.min(BATCH, remaining);
+
+  ALL_IDS.forEach(id => {
+    const theta = getThetaFor(id);
+    let localSum = 0;
+    const bDots = [];
+
+    for (let i = 0; i < bs; i++) {
+      const a1 = Math.random() * theta;
+      const a2 = Math.random() * theta;
+      localSum += 2 * Math.abs(Math.sin((a1 - a2) / 2));
+      if (i < 60) bDots.push({ a1, a2 });
+    }
+
+    state.data[id].sum  += localSum;
+    state.data[id].dots  = bDots;
+  });
+
+  state.totalCount += bs;
+
+  drawAll();
+  updateStats();
+
+  progBar.style.width = (state.totalCount / state.target * 100) + '%';
+
+  if (state.totalCount >= state.target) {
+    finish();
+  } else {
+    state.raf = requestAnimationFrame(runBatch);
+  }
+}
+
+function finish() {
+  state.running = false;
+  btnRun.disabled = btnReset.disabled = false;
+  progWrap.classList.remove('active');
+  addHistory();
+}
+
+function updateStats() {
+  const n = state.totalCount;
+  ALL_IDS.forEach(id => {
+    const mean  = state.data[id].sum / n;
+    const exact = getExactFor(id);
+    const err   = Math.abs((mean - exact) / exact * 100);
+    document.getElementById('val' + cap(id)).textContent = mean.toFixed(6);
+    document.getElementById('err' + cap(id)).textContent = 'Error: ' + err.toFixed(4) + ' %';
+    document.getElementById('n'   + cap(id)).textContent = 'N = ' + fmtFull(n);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Reset
+   ═══════════════════════════════════════════════════════════ */
+function resetAll() {
+  if (state.raf) cancelAnimationFrame(state.raf);
+  state.running    = false;
+  state.totalCount = 0;
+  state.target     = 0;
+
+  ALL_IDS.forEach(id => {
+    state.data[id] = { sum: 0, dots: [] };
+    document.getElementById('val' + cap(id)).textContent = '—';
+    document.getElementById('err' + cap(id)).textContent = '';
+    document.getElementById('n'   + cap(id)).textContent = 'N = 0';
+  });
+
+  progWrap.classList.remove('active');
+  progBar.style.width = '0%';
+  btnRun.disabled = btnReset.disabled = false;
+  drawAll();
+
+  historyOpen = false;
+  historyBlock.classList.remove('open');
+  historyCount.textContent = '0';
+  histList.innerHTML = '';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   History
+   ═══════════════════════════════════════════════════════════ */
+function addHistory() {
+  const n = state.totalCount;
+  const row = document.createElement('div');
+  row.className = 'history-row';
+  let html = '<span class="h-n">N=' + fmtFull(n) + '</span>';
+  ALL_IDS.forEach(id => {
+    const mean  = state.data[id].sum / n;
+    const exact = getExactFor(id);
+    const err   = Math.abs((mean - exact) / exact * 100);
+    const cls   = id === 'circle' ? 'h-green' : id === 'semi' ? 'h-blue' : 'h-sector';
+    const label = id === 'circle' ? 'Circ' : id === 'semi' ? 'Semi' : 'Sec(' + formatAngle(sectorTheta) + ')';
+    html += '<span class="' + cls + '">' + label + ': ' + mean.toFixed(5) + ' ±' + err.toFixed(3) + '%</span>';
+  });
+  row.innerHTML = html;
+  histList.insertBefore(row, histList.firstChild);
+  const count = histList.children.length;
+  historyCount.textContent = count;
+  if (!historyOpen) {
+    historyOpen = true;
+    historyBlock.classList.add('open');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Event listeners
+   ═══════════════════════════════════════════════════════════ */
+btnRun.addEventListener('click', startSim);
+btnReset.addEventListener('click', resetAll);
+
+/* ═══════════════════════════════════════════════════════════
+   Init
+   ═══════════════════════════════════════════════════════════ */
+setAngle(Math.PI / 2);
+requestAnimationFrame(resizeAll);
+
+/* ═══════════════════════════════════════════════════════════
+   Service Worker
+   ═══════════════════════════════════════════════════════════ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW registrado:', reg.scope))
+      .catch(err => console.error('Error SW:', err));
+  });
+}
+</script>
+</body>
+</html>
