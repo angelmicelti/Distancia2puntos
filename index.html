@@ -863,10 +863,12 @@ function toggle(id) {
 
   updateExactRow();
   updateBtnState();
+  updateLayout();
 
   requestAnimationFrame(() => {
     resizeAll();
     drawAll();
+  });
   });
 }
 
@@ -969,6 +971,7 @@ function logSize(canvas) {
 }
 
 function resizeAll() {
+  updateLayout();
   if (state.visible.includes('circle')) { sizeCanvas(canvasCircle); drawCircle(); }
   if (state.visible.includes('semi'))   { sizeCanvas(canvasSemi);   drawSemi();   }
   if (state.visible.includes('sector')) { sizeCanvas(canvasSector); drawSector(); }
@@ -976,7 +979,7 @@ function resizeAll() {
 
 function resizeSector() { sizeCanvas(canvasSector); }
 
-window.addEventListener('resize', () => { resizeAll(); });
+window.addEventListener('resize', () => requestAnimationFrame(resizeAll));
 
 /* ═══════════════════════════════════════════════════════════
    Draw: Circle
@@ -985,7 +988,7 @@ function drawCircle() {
   const [W, H] = logSize(canvasCircle);
   ctxC.clearRect(0, 0, W, H);
   const cx = W / 2, cy = H / 2;
-  const R = Math.min(cx - 10, cy - 6);
+  const R = Math.min(cx - 10, cy - 10);
   const lw = Math.max(1.2, R * 0.01);
   const dotR = Math.max(3, R * 0.022);
 
@@ -1036,8 +1039,8 @@ function drawCircle() {
 function drawSemi() {
   const [W, H] = logSize(canvasSemi);
   ctxS.clearRect(0, 0, W, H);
-  const cx = W / 2, cy = H - 14;
-  const R = Math.min(cx - 10, cy - 4);
+  const cx = W / 2, cy = H - 12;
+  const R = Math.min(cx - 10, cy - 6);
   const lw = Math.max(1.2, R * 0.01);
   const dotR = Math.max(3, R * 0.022);
 
@@ -1080,10 +1083,10 @@ function drawSemi() {
     });
   }
 
-  const fs = Math.max(9, R * 0.07);
+  const fs = Math.max(8, R * 0.07);
   ctxS.fillStyle = '#bbb'; ctxS.font = fs + 'px DM Mono,monospace';
-  ctxS.fillText('−R', cx - R - fs * 1.4, cy + fs * 1.2);
-  ctxS.fillText('+R', cx + R + fs * 0.3,  cy + fs * 1.2);
+  ctxS.fillText('−R', cx - R - fs * 1.4, cy + fs * 0.9);
+  ctxS.fillText('+R', cx + R + fs * 0.3,  cy + fs * 0.9);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1092,9 +1095,26 @@ function drawSemi() {
 function drawSector() {
   const [W, H] = logSize(canvasSector);
   ctxSec.clearRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2;
-  const R  = Math.min(cx - 10, cy - 6);
+  const cx = W / 2;
   const theta = sectorTheta;
+  const margin = 10;
+
+  // Vertical extent ratio: 1 for θ≤π, (1−cos(θ/2)) for θ>π
+  const vRatio = theta <= Math.PI ? 1 : (1 - Math.cos(theta / 2));
+  // Horizontal extent ratio: sin(θ/2) for θ<π, 1 for θ≥π
+  const hRatio = theta < Math.PI ? Math.sin(theta / 2) : 1;
+
+  // R limited by both width and height available
+  const R = Math.min(
+    (cx - margin) / Math.max(0.01, hRatio),
+    (H - 2 * margin) / Math.max(0.01, vRatio)
+  );
+
+  // Center vertically: place geometry's vertical center at canvas H/2
+  const yOffset = theta <= Math.PI
+    ? R / 2
+    : R * (1 + Math.cos(theta / 2)) / 2;
+  const cy = H / 2 + yOffset;
   const lw = Math.max(1.2, R * 0.01);
   const dotR = Math.max(3, R * 0.022);
 
