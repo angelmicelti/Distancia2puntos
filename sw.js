@@ -1,7 +1,7 @@
 /* Service Worker — Distancia Media Monte Carlo PWA
  * Strategy: Cache-first for app shell, network-first for Google Fonts */
 
-const CACHE_NAME = 'distmc-v1';
+const CACHE_NAME = 'distmc-v2';
 
 const APP_SHELL = [
   './',
