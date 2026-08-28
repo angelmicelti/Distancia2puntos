@@ -393,6 +393,34 @@
   button:disabled:hover { background: transparent; color: var(--ink); }
   button.primary:disabled:hover { background: var(--ink); color: var(--paper); }
 
+  /* EXPORT ROW */
+  .export-row {
+    padding: .45rem 1.2rem;
+    display: flex; gap: .6rem;
+    border-top: 1px solid var(--rule);
+  }
+  .export-btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-family: var(--mono); font-size: .75rem;
+    padding: .4rem .85rem;
+    border: 1px solid var(--rule);
+    background: transparent; color: #777;
+    cursor: pointer; border-radius: 3px;
+    transition: border-color .15s, color .15s, background .15s;
+    letter-spacing: .03em;
+  }
+  .export-btn svg { flex-shrink: 0; opacity: .7; }
+  .export-btn:hover:not(:disabled) {
+    border-color: var(--ink); color: var(--ink);
+    background: rgba(0,0,0,.03);
+  }
+  .export-btn:disabled {
+    opacity: .3; cursor: not-allowed;
+  }
+  .export-btn:disabled:hover {
+    background: transparent; color: #777; border-color: var(--rule);
+  }
+
   /* HISTORY */
   .history-block { border-top: 1px solid var(--rule); }
   .history-toggle {
@@ -468,6 +496,7 @@
       align-items: center; gap: .35rem .9rem;
     }
     .btn-row { padding: .6rem 1rem; }
+    .export-row { padding: .45rem 1rem; }
     .slider-block { padding: .65rem 1rem .6rem; }
     button { padding: .55rem 1.1rem; font-size: .88rem; }
     input[type=range] { height: 5px; }
@@ -499,6 +528,28 @@
     .btn-row { padding-bottom: calc(.65rem + env(safe-area-inset-bottom)); }
   }
 </style>
+<!-- Export libraries (loaded lazily on first export) -->
+<script>
+  var _xlsxLoaded = false, _pdfLoaded = false;
+  function loadScript(src) {
+    return new Promise(function(resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  function ensureXlsx() {
+    if (_xlsxLoaded) return Promise.resolve();
+    return loadScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js')
+      .then(function() { _xlsxLoaded = true; });
+  }
+  function ensurePdf() {
+    if (_pdfLoaded) return Promise.resolve();
+    return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js')
+      .then(function() { return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js'); })
+      .then(function() { _pdfLoaded = true; });
+  }
+</script>
 </head>
 <body>
 
@@ -632,6 +683,16 @@
       <button class="primary" id="btnRun">Simular</button>
       <button id="btnReset">Reiniciar</button>
     </div>
+    <div class="export-row" id="exportRow">
+      <button class="export-btn" id="btnExportXlsx" disabled onclick="exportExcel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Exportar Excel
+      </button>
+      <button class="export-btn" id="btnExportPdf" disabled onclick="exportPDF()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+        Exportar PDF
+      </button>
+    </div>
     <div class="history-block" id="historyBlock">
       <div class="history-toggle" id="historyToggle">
         <span class="history-toggle-label">Historial</span>
@@ -693,6 +754,9 @@ const state = {
     sector: { sum: 0, dots: [] },
   }
 };
+
+// Structured history for export
+let historyData = [];
 
 /* ═════════════════════════════════════════════════════
    DOM refs
@@ -1107,6 +1171,7 @@ function resetAll() {
   drawAll();
   historyOpen = false; historyBlock.classList.remove('open');
   historyCount.textContent = '0'; histList.innerHTML = '';
+  historyData = []; updateExportBtns();
 }
 
 /* ═════════════════════════════════════════════════════
@@ -1117,6 +1182,7 @@ function addHistory() {
   const row = document.createElement('div');
   row.className = 'history-row';
   let html = '<span class="h-n">N=' + fmtFull(n) + '</span>';
+  const record = { n, timestamp: new Date().toISOString(), sectorTheta, results: {} };
   ALL_IDS.forEach(id => {
     const mean = state.data[id].sum / n;
     const exact = getExactFor(id);
@@ -1124,10 +1190,13 @@ function addHistory() {
     const cls = id === 'circle' ? 'h-green' : id === 'semi' ? 'h-blue' : 'h-sector';
     const label = id === 'circle' ? 'Circ' : id === 'semi' ? 'Semi' : 'Sec(' + formatAngle(sectorTheta) + ')';
     html += '<span class="' + cls + '">' + label + ': ' + mean.toFixed(5) + ' ±' + err.toFixed(3) + '%</span>';
+    record.results[id] = { mean, exact, err };
   });
   row.innerHTML = html;
   histList.insertBefore(row, histList.firstChild);
+  historyData.unshift(record);
   historyCount.textContent = histList.children.length;
+  updateExportBtns();
   if (!historyOpen) { historyOpen = true; historyBlock.classList.add('open'); }
 }
 
@@ -1142,6 +1211,190 @@ btnReset.addEventListener('click', resetAll);
    ═════════════════════════════════════════════════════ */
 setAngle(Math.PI / 2);
 requestAnimationFrame(resizeAll);
+
+/* ═════════════════════════════════════════════════════
+   Export: enable/disable buttons
+   ═════════════════════════════════════════════════════ */
+function updateExportBtns() {
+  var has = historyData.length > 0;
+  document.getElementById('btnExportXlsx').disabled = !has;
+  document.getElementById('btnExportPdf').disabled  = !has;
+}
+
+/* ═════════════════════════════════════════════════════
+   Export: Excel (.xlsx)
+   ═════════════════════════════════════════════════════ */
+function exportExcel() {
+  if (!historyData.length) return;
+  ensureXlsx().then(function() {
+    var wsData = [];
+    // Header row
+    wsData.push([
+      '#', 'N (pares)', 'Fecha / Hora', 'Angulo sector (theta_0)',
+      'Circunferencia: Exacto', 'Circunferencia: Simulado', 'Circunferencia: Error (%)',
+      'Semicircunferencia: Exacto', 'Semicircunferencia: Simulado', 'Semicircunferencia: Error (%)',
+      'Sector: Exacto', 'Sector: Simulado', 'Sector: Error (%)'
+    ]);
+    historyData.forEach(function(r, i) {
+      var c = r.results.circle, s = r.results.semi, sc = r.results.sector;
+      var ts = new Date(r.timestamp);
+      var dateStr = ts.toLocaleDateString('es-ES') + ' ' + ts.toLocaleTimeString('es-ES');
+      wsData.push([
+        i + 1,
+        r.n,
+        dateStr,
+        r.sectorTheta,
+        c.exact, c.mean, c.err,
+        s.exact, s.mean, s.err,
+        sc.exact, sc.mean, sc.err
+      ]);
+    });
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    // Column widths
+    ws['!cols'] = [
+      {wch:4},{wch:14},{wch:20},{wch:22},
+      {wch:20},{wch:20},{wch:20},
+      {wch:20},{wch:20},{wch:20},
+      {wch:20},{wch:20},{wch:20}
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Simulaciones');
+    // Summary sheet
+    var sumData = [['Resumen por figura']];
+    sumData.push(['Figura', 'Simulaciones', 'Min Error (%)', 'Max Error (%)', 'Error medio (%)']);
+    ['circle','semi','sector'].forEach(function(id) {
+      var label = id === 'circle' ? 'Circunferencia completa' : id === 'semi' ? 'Semicircunferencia' : 'Sector circular';
+      var errs = historyData.map(function(r) { return r.results[id].err; });
+      sumData.push([
+        label,
+        errs.length,
+        Math.min.apply(null, errs).toFixed(4),
+        Math.max.apply(null, errs).toFixed(4),
+        (errs.reduce(function(a,b){return a+b;},0) / errs.length).toFixed(4)
+      ]);
+    });
+    var ws2 = XLSX.utils.aoa_to_sheet(sumData);
+    ws2['!cols'] = [{wch:28},{wch:14},{wch:16},{wch:16},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen');
+    XLSX.writeFile(wb, 'montecarlo_distancias.xlsx');
+  }).catch(function() {
+    alert('Error al cargar la libreria de Excel. Verifica la conexion a Internet.');
+  });
+}
+
+/* ═════════════════════════════════════════════════════
+   Export: PDF
+   ═════════════════════════════════════════════════════ */
+function exportPDF() {
+  if (!historyData.length) return;
+  ensurePdf().then(function() {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    // Title
+    doc.setFontSize(14);
+    doc.text('Simulacion Monte Carlo - Distancia media entre puntos aleatorios', 14, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text('Generado: ' + new Date().toLocaleString('es-ES'), 14, 21);
+    doc.text('Total simulaciones: ' + historyData.length, 14, 26);
+    // Build table data
+    var body = [];
+    historyData.forEach(function(r, i) {
+      var c = r.results.circle, s = r.results.semi, sc = r.results.sector;
+      var ts = new Date(r.timestamp);
+      var dateStr = ts.toLocaleDateString('es-ES') + ' ' + ts.toLocaleTimeString('es-ES', {hour:'2-digit',minute:'2-digit'});
+      body.push([
+        i + 1,
+        r.n.toLocaleString('es-ES'),
+        dateStr,
+        r.sectorTheta.toFixed(3),
+        c.mean.toFixed(6), c.err.toFixed(3) + '%',
+        s.mean.toFixed(6), s.err.toFixed(3) + '%',
+        sc.mean.toFixed(6), sc.err.toFixed(3) + '%'
+      ]);
+    });
+    doc.autoTable({
+      startY: 30,
+      head: [[
+        '#', 'N', 'Fecha', 'Theta_0',
+        'Circ. Sim.', 'Circ. Err.',
+        'Semi. Sim.', 'Semi. Err.',
+        'Sec. Sim.', 'Sec. Err.'
+      ]],
+      body: body,
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 2, font: 'helvetica' },
+      headStyles: { fillColor: [14,14,18], textColor: [246,244,239], fontSize: 7.5 },
+      alternateRowStyles: { fillColor: [246,244,239] },
+      columnStyles: {
+        0: {cellWidth:8, halign:'center'},
+        1: {cellWidth:18, halign:'right'},
+        2: {cellWidth:28},
+        3: {cellWidth:16, halign:'center'},
+        4: {cellWidth:22, halign:'right', textColor: [26,140,91]},
+        5: {cellWidth:16, halign:'right', textColor: [26,140,91]},
+        6: {cellWidth:22, halign:'right', textColor: [42,95,173]},
+        7: {cellWidth:16, halign:'right', textColor: [42,95,173]},
+        8: {cellWidth:22, halign:'right', textColor: [181,84,58]},
+        9: {cellWidth:16, halign:'right', textColor: [181,84,58]},
+      }
+    });
+    // Summary on a second page if there are enough rows
+    var finalY = doc.lastAutoTable.finalY;
+    if (finalY > 160) {
+      doc.addPage();
+      finalY = 15;
+    } else {
+      finalY += 10;
+    }
+    doc.setFontSize(11);
+    doc.setTextColor(14,14,18);
+    doc.text('Resumen por figura', 14, finalY);
+    finalY += 3;
+    var sumBody = [];
+    ['circle','semi','sector'].forEach(function(id) {
+      var label = id === 'circle' ? 'Circunferencia (theta=2pi)' : id === 'semi' ? 'Semicircunferencia (theta=pi)' : 'Sector (theta_0=' + historyData[0].sectorTheta.toFixed(3) + ')';
+      var errs = historyData.map(function(r) { return r.results[id].err; });
+      var means = historyData.map(function(r) { return r.results[id].mean; });
+      var avgMean = means.reduce(function(a,b){return a+b;},0) / means.length;
+      var avgErr = errs.reduce(function(a,b){return a+b;},0) / errs.length;
+      var exact = historyData[0].results[id].exact;
+      sumBody.push([
+        label,
+        exact.toFixed(6),
+        avgMean.toFixed(6),
+        Math.min.apply(null, errs).toFixed(4) + '%',
+        Math.max.apply(null, errs).toFixed(4) + '%',
+        avgErr.toFixed(4) + '%'
+      ]);
+    });
+    doc.autoTable({
+      startY: finalY + 2,
+      head: [['Figura', 'Valor exacto', 'Media simulada', 'Min error', 'Max error', 'Error medio']],
+      body: sumBody,
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica' },
+      headStyles: { fillColor: [14,14,18], textColor: [246,244,239] },
+      alternateRowStyles: { fillColor: [246,244,239] },
+      columnStyles: {
+        0: {cellWidth: 55},
+        1: {cellWidth: 30, halign:'right'},
+        2: {cellWidth: 30, halign:'right'},
+        3: {cellWidth: 25, halign:'right'},
+        4: {cellWidth: 25, halign:'right'},
+        5: {cellWidth: 25, halign:'right'},
+      }
+    });
+    // Formulas footnote
+    var fy = doc.lastAutoTable.finalY + 8;
+    doc.setFontSize(7);
+    doc.setTextColor(150);
+    doc.text('E[d] Circunferencia = 4/pi  |  E[d] Semicircunferencia = 8(pi-2)/pi^2  |  E[d] Sector = 8(theta_0 - 2sin(theta_0/2)) / theta_0^2', 14, fy);
+    doc.save('montecarlo_distancias.pdf');
+  }).catch(function() {
+    alert('Error al cargar la libreria de PDF. Verifica la conexion a Internet.');
+  });
+}
 
 /* ═════════════════════════════════════════════════════
    Service Worker
